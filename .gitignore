@@ -4,3 +4,10 @@ output/
 *.mp3
 *.mp4
 *.wav
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
