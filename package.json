@@ -1,0 +1,20 @@
+{
+  "name": "ai-avatar-pipeline",
+  "version": "0.1.0",
+  "description": "Automated AI avatar video production pipeline using Fish Audio + HeyGen",
+  "type": "module",
+  "main": "src/orchestrator.js",
+  "scripts": {
+    "start": "node src/orchestrator.js",
+    "test": "node src/test/manualTest.js",
+    "generate": "node src/orchestrator.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "node-fetch": "^3.3.0",
+    "fs-extra": "^11.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
