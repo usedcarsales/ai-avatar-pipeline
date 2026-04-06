@@ -67,3 +67,20 @@ class Config:
         if not self.heygen_api_key:
             missing.append("HEYGEN_API_KEY")
         return missing
+
+    def redacted(self) -> dict[str, str]:
+        """Return config as dict with API keys masked for safe logging."""
+        def _mask(val: str) -> str:
+            if not val or len(val) < 8:
+                return "***" if val else ""
+            return val[:4] + "..." + val[-4:]
+
+        return {
+            "heygen_api_key": _mask(self.heygen_api_key),
+            "fish_api_key": _mask(self.fish_api_key),
+            "default_avatar_id": self.default_avatar_id,
+            "default_voice_id": self.default_voice_id,
+            "video_width": str(self.video_width),
+            "video_height": str(self.video_height),
+            "output_dir": self.output_dir,
+        }

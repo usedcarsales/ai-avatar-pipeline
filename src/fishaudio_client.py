@@ -129,6 +129,11 @@ class FishAudioClient:
         if ref_id:
             payload["reference_id"] = ref_id
 
+        if not text.strip():
+            raise FishAudioError("Text cannot be empty")
+        if len(text) > 10000:
+            raise FishAudioError("Text exceeds 10,000 character limit")
+
         logger.info("Generating TTS (%d chars, ref=%s)", len(text), ref_id or "default")
         resp = await self._request(
             "POST",

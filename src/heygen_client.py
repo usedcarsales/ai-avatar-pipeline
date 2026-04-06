@@ -177,6 +177,12 @@ class HeyGenClient:
         if voice_id:
             payload["video_inputs"][0]["voice"]["voice_id"] = voice_id
 
+        # Input validation
+        if len(script) > 10000:
+            raise HeyGenError("Script exceeds 10,000 character limit")
+        if not script.strip():
+            raise HeyGenError("Script cannot be empty")
+
         logger.info("Submitting video generation (avatar=%s)", avatar_id)
         data = await self._request("POST", "/v2/video/generate", json=payload)
         video_id = data.get("data", {}).get("video_id", "")
