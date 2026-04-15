@@ -1,138 +1,154 @@
-# AI Avatar Video Pipeline
+# AI Avatar Video Pipeline v2
 
-Automated video production pipeline that turns a topic or script into a finished AI avatar video using Fish Audio (TTS) + HeyGen (avatar rendering).
+Automated video production pipeline using **HeyGen CLI** + **Claude** — from topic to finished video in one command.
 
-Built by [Particulate LLC](https://particulate.ai).
+## What Changed in v2
+
+The original pipeline used custom REST API calls to Fish Audio and HeyGen. HeyGen's official CLI ([docs](https://developers.heygen.com/cli)) now handles video generation, voice synthesis, avatar listing, and downloading — so we replaced ~300 lines of custom HTTP code with CLI calls.
+
+**Old:** `avatarRenderer.js` + `voiceSynth.js` (REST API polling, manual auth, custom download)
+**New:** `videoRenderer.js` (HeyGen CLI with `--wait` flag, built-in auth, built-in download)
+
+Fish Audio is still supported for custom voice cloning, but no longer required for basic pipeline operation.
 
 ## Stack
 
 | Component | Service | Cost |
 |-----------|---------|------|
-| Voice / TTS | Fish Audio API | ~$0.09/video |
-| Avatar Video | HeyGen Creator | $29/mo |
 | Script Generation | Claude (Anthropic) | ~$0.01/video |
-| **Total** | | **~$32/mo** |
+| Avatar Video | HeyGen CLI (Video Agent) | ~$0.033/sec |
+| Avatar Video (specific avatar) | HeyGen CLI (Avatar IV) | ~$0.10/sec |
+| Voice (included in HeyGen) | HeyGen built-in | Included |
+| Custom Voice Cloning | Fish Audio (optional) | ~$0.006/video |
+| B-roll / Scene Video | OpenClaw native (optional) | Per-clip |
 
-30 videos/month = 95%+ gross margin at service pricing.
+## Prerequisites
 
-## Quick Start
+1. **Node.js 18+**
+2. **HeyGen CLI** — install with:
+   ```bash
+   curl -fsSL https://static.heygen.ai/cli/install.sh | bash
+   ```
+3. **HeyGen API key** — get from https://app.heygen.com/settings/api
+4. **Anthropic API key** (for script generation)
+
+## Setup
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/usedcarsales/ai-avatar-pipeline.git
+# 1. Clone the repo
+git clone https://github.com/usedcarsales/ai-avatar-pipeline
 cd ai-avatar-pipeline
-pip install -r requirements.txt
 
-# 2. Configure API keys
+# 2. Install dependencies
+npm install
+
+# 3. Install HeyGen CLI
+curl -fsSL https://static.heygen.ai/cli/install.sh | bash
+
+# 4. Authenticate HeyGen
+heygen auth login
+# Or set environment variable:
+export HEYGEN_API_KEY=your_key_here
+
+# 5. Configure environment
 cp .env.example .env
-# Edit .env with your HEYGEN_API_KEY (required) and FISH_API_KEY (optional)
+# Edit .env with your API keys
 
-# 3. List available avatars
-python -m examples.list_available_avatars
-
-# 4. Generate a video
-python -m examples.generate_sample_video
+# 6. Run a test
+npm test
 ```
-
-## Architecture
-
-```
-Script (text) ─→ Voice Layer ─→ Avatar Layer ─→ .mp4 output
-                  │                │
-                  ├─ HeyGen TTS    └─ HeyGen avatar rendering
-                  └─ Fish Audio TTS (custom voices)
-```
-
-**Two pipeline modes:**
-
-- **Option A — HeyGen only** (`voice_source="heygen"`): Simplest path. HeyGen handles both voice synthesis and avatar rendering.
-- **Option B — Fish Audio + HeyGen** (`voice_source="fish"`): Use Fish Audio for custom/cloned voices, then feed audio into HeyGen for avatar lip-sync.
 
 ## Usage
 
-```python
-import asyncio
-from src.pipeline import AvatarPipeline
-from src.config import Config
+### Generate a video from a topic (simplest mode)
+```bash
+# HeyGen handles everything: script, avatar, voice, layout
+node src/orchestrator.js "3 ways AI avatars save businesses 10 hours per week"
+```
 
-async def main():
-    config = Config.from_env()
-    pipeline = AvatarPipeline(config)
+### Generate with specific avatar and voice
+```bash
+node src/orchestrator.js --avatar-id avt_angela_01 --voice-id abc123 "Welcome to our company"
+```
 
-    # Option A: HeyGen handles voice
-    await pipeline.run(
-        script="Hello from Particulate LLC!",
-        avatar_id="your_avatar_id",
-        output_path="output/video.mp4",
-    )
+### Skip Claude script generation (use topic as-is)
+```bash
+node src/orchestrator.js --no-script "Product demo in 30 seconds"
+```
 
-    # Option B: Fish Audio custom voice
-    await pipeline.run(
-        script="Hello with a custom voice!",
-        avatar_id="your_avatar_id",
-        output_path="output/custom_voice.mp4",
-        voice_source="fish",
-        voice_id="your_fish_reference_id",
-    )
+### List available avatars
+```bash
+node src/orchestrator.js --list-avatars
+```
 
-asyncio.run(main())
+### Batch produce videos from a file
+```bash
+node src/orchestrator.js --batch topics.txt
+```
+
+### Programmatic
+```javascript
+import { runPipeline, runPipelineWithAvatar, runBatch } from './src/orchestrator.js';
+
+// Simple mode — Video Agent handles everything
+const result = await runPipeline('Your video topic here', {
+  orientation: 'landscape',
+  download: true
+});
+console.log(result.videoUrl);
+
+// Full control — specific avatar and voice
+const result = await runPipelineWithAvatar(script, 'avatar-id', 'voice-id');
+
+// Batch mode
+const results = await runBatch(['topic 1', 'topic 2', 'topic 3']);
 ```
 
 ## Project Structure
 
 ```
-src/
-  config.py             # Environment variable loading
-  heygen_client.py      # HeyGen API wrapper (async, retry, polling)
-  fishaudio_client.py   # Fish Audio API wrapper (TTS, voice cloning)
-  pipeline.py           # End-to-end orchestrator
-tests/
-  test_heygen_client.py    # Unit tests (mocked API calls)
-  test_fishaudio_client.py # Unit tests (mocked API calls)
-  test_pipeline.py         # Integration tests (live tests skipped by default)
-examples/
-  generate_sample_video.py   # Generate a sample video
-  list_available_avatars.py  # Print available HeyGen avatars/voices
-research/                    # Phase 1 research docs
+ai-avatar-pipeline/
+├── src/
+│   ├── orchestrator.js       # Main pipeline runner (v2 — HeyGen CLI)
+│   ├── scriptGenerator.js    # Claude-powered script generation
+│   ├── videoRenderer.js      # HeyGen CLI wrapper (replaces avatarRenderer + voiceSynth)
+│   ├── test/
+│   │   └── manualTest.js     # End-to-end test
+│   └── utils/
+│       └── logger.js         # Logging utility
+├── research/                 # Phase 1 research docs
+│   ├── target-audience-analysis.md
+│   ├── competitor-analysis.md
+│   ├── technical-requirements.md
+│   └── content-strategy.md
+├── output/                   # Generated videos (gitignored)
+├── .env.example
+├── package.json
+└── README.md
 ```
 
-## Running Tests
+## Key Differences from v1
 
-```bash
-# Unit tests (no API keys needed)
-pytest tests/
+| Feature | v1 (REST API) | v2 (HeyGen CLI) |
+|---------|---------------|------------------|
+| Auth | Manual API key headers | `heygen auth login` or env var |
+| Video generation | Custom POST + poll loop | `heygen video-agent create --wait` |
+| Avatar listing | Custom GET request | `heygen avatar list` |
+| Download | Custom fetch + write | `heygen video download` |
+| Voice synthesis | Fish Audio (separate) | HeyGen built-in (or Fish Audio optional) |
+| Polling | 50+ lines of custom code | `--wait` flag |
+| API version | v1 (deprecated) | v3 (current) |
+| Avatar engine | III (deprecated July 2026) | IV/V (future-proof) |
 
-# Live integration tests (requires API keys in .env)
-RUN_LIVE_TESTS=1 pytest tests/test_pipeline.py -v
-```
+## ⚠️ Important Notes
 
-## API Keys
-
-### HeyGen
-1. Sign up at https://www.heygen.com/ (Creator plan $29/mo)
-2. Go to https://app.heygen.com/avatar?nav=API
-3. Generate API key and add to `.env`
-
-### Fish Audio
-1. Sign up at https://fish.audio/
-2. Go to Account → API Keys
-3. Create a new key and add to `.env`
-
-## Research
-
-See the [`research/`](./research/) folder for Phase 1 findings:
-- Target audience analysis
-- Competitor analysis (HeyGen vs Synthesia vs D-ID vs DeepReel)
-- Technical requirements & API docs
-- Content strategy framework
+- **Avatar III is deprecated** — HeyGen v3 API (used by CLI) targets Avatar IV/V. Migrate any existing workflows.
+- **HeyGen CLI requires WSL on Windows** — native Windows support coming soon. Both our rigs run WSL2 ✅
+- **Video Agent mode** is the simplest way to generate videos. It handles scripting, avatar selection, and layout automatically. Use specific avatar/voice when you need brand consistency.
 
 ## Roadmap
 
 - [x] Phase 1: Research & architecture
-- [x] Phase 2: Core pipeline modules (HeyGen + Fish Audio clients)
+- [x] Phase 2: Pipeline build (v2 — HeyGen CLI)
 - [ ] Phase 3: Content engine & batch production
 - [ ] Phase 4: Analytics & multi-brand expansion
-
-## License
-
-Proprietary — Particulate LLC
